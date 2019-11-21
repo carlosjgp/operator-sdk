@@ -30,9 +30,10 @@ import (
 )
 
 var (
-	imageBuildArgs string
-	imageBuilder   string
-	goBuildArgs    string
+	imageBuildEnable bool
+	imageBuildArgs   string
+	imageBuilder     string
+	goBuildArgs      string
 )
 
 func NewCmd() *cobra.Command {
@@ -54,6 +55,7 @@ For example:
 `,
 		RunE: buildFunc,
 	}
+	buildCmd.Flags().BoolVar(&imageBuildEnable, "image-build-enabled", true, "Build operator Docker image")
 	buildCmd.Flags().StringVar(&imageBuildArgs, "image-build-args", "", "Extra image build arguments as one string such as \"--build-arg https_proxy=$https_proxy\"")
 	buildCmd.Flags().StringVar(&imageBuilder, "image-builder", "docker", "Tool to build OCI images. One of: [docker, podman, buildah]")
 	buildCmd.Flags().StringVar(&goBuildArgs, "go-build-args", "", "Extra Go build arguments as one string such as \"-ldflags -X=main.xyz=abc\"")
@@ -128,15 +130,18 @@ func buildFunc(cmd *cobra.Command, args []string) error {
 
 	image := args[0]
 
-	log.Infof("Building OCI image %s", image)
+	if imageBuildEnable {
+		log.Infof("Building OCI image %s", image)
+		buildCmd, err := createBuildCommand(imageBuilder, ".", "build/Dockerfile", image, imageBuildArgs)
+		if err != nil {
+			return err
+		}
 
-	buildCmd, err := createBuildCommand(imageBuilder, ".", "build/Dockerfile", image, imageBuildArgs)
-	if err != nil {
-		return err
-	}
-
-	if err := projutil.ExecCmd(buildCmd); err != nil {
-		return fmt.Errorf("failed to output build image %s: (%v)", image, err)
+		if err := projutil.ExecCmd(buildCmd); err != nil {
+			return fmt.Errorf("failed to output build image %s: (%v)", image, err)
+		}
+	} else {
+		log.Info("Not building OCI image")
 	}
 
 	log.Info("Operator build complete.")
